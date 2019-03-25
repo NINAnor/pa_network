@@ -1,4 +1,3 @@
-
 ### Load required libraries
 # Load GRASS library
 library("rgrass7")
@@ -23,12 +22,15 @@ con_string <- paste0('PG:host=', pg_host, ' dbname=', pg_db, ' user=', pg_user)
 
 create_view <- paste0('DROP VIEW pa_network.protected_', ecosystem, ';
 CREATE MATERIALIZED VIEW pa_network.protected_', ecosystem, ' AS
-SELECT pa_buffered.*, ST_Intersection(eco.geom, pa_buffered.geom) FROM
-	(SELECT pa.* FROM 
-		"ProtectedSites"."Fenoscandia_NatDesignAreas_CDDA_ProtectedSite_Polygons" AS pa,
-		(SELECT geom FROM "AdministrativeUnits"."Fenoscandia_Country_polygon" WHERE "countryCode" = \'NO\') AS no
-	WHERE ST_DWithin(pa.geom, no.geom, 70000)) AS pa_buffered,
-	pa_network."Fenoscandia_LandCover_polygon_', ecosystem, '" AS eco
+SELECT	pa_buffered.gid,
+	-- Apply Union ("dissolve") on polygons resulting from intersection of PAs and land cover types
+	ST_Union(ST_CollectionExtract(ST_Intersection(eco.geom, pa_buffered.geom), 3)) AS geom FROM
+		(SELECT 	-- in the following line more columns could be selected if needed
+			pa.gid, pa.geom FROM 
+			"ProtectedSites"."Fenoscandia_NatDesignAreas_CDDA_ProtectedSite_Polygons" AS pa,
+			(SELECT geom FROM "AdministrativeUnits"."Fenoscandia_Country_polygon" WHERE "countryCode" = \'NO\') AS no
+			WHERE ST_DWithin(pa.geom, no.geom, 70000)) AS pa_buffered,
+		pa_network."Fenoscandia_LandCover_polygon_', ecosystem, '" AS eco
 WHERE ST_Intersects(eco.geom, pa_buffered.geom);')
 
 rs <- dbSendQuery(con, create_view)
