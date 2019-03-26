@@ -22,16 +22,17 @@ con_string <- paste0('PG:host=', pg_host, ' dbname=', pg_db, ' user=', pg_user)
 
 create_view <- paste0('DROP VIEW pa_network.protected_', ecosystem, ';
 CREATE MATERIALIZED VIEW pa_network.protected_', ecosystem, ' AS
-SELECT	pa_buffered.gid,
-	-- Apply Union ("dissolve") on polygons resulting from intersection of PAs and land cover types
-	ST_Union(ST_CollectionExtract(ST_Intersection(eco.geom, pa_buffered.geom), 3)) AS geom FROM
-		(SELECT 	-- in the following line more columns could be selected if needed
-			pa.gid, pa.geom FROM 
-			"ProtectedSites"."Fenoscandia_NatDesignAreas_CDDA_ProtectedSite_Polygons" AS pa,
-			(SELECT geom FROM "AdministrativeUnits"."Fenoscandia_Country_polygon" WHERE "countryCode" = \'NO\') AS no
-			WHERE ST_DWithin(pa.geom, no.geom, 70000)) AS pa_buffered,
-		pa_network."Fenoscandia_LandCover_polygon_', ecosystem, '" AS eco
-WHERE ST_Intersects(eco.geom, pa_buffered.geom);')
+SELECT pa_buffered.gid,
+    -- Apply Union ("dissolve") on polygons resulting from intersection of PAs and land cover types
+    ST_Union(ST_CollectionExtract(ST_Intersection(eco.geom, pa_buffered.geom), 3)) AS geom FROM
+        (SELECT     -- in the following line more columns could be selected if needed
+            pa.gid, pa.geom FROM 
+            "ProtectedSites"."Fenoscandia_NatDesignAreas_CDDA_ProtectedSite_Polygons" AS pa,
+            (SELECT geom FROM "AdministrativeUnits"."Fenoscandia_Country_polygon" WHERE "countryCode" = \'NO\') AS no
+            WHERE ST_DWithin(pa.geom, no.geom, 70000)) AS pa_buffered,
+        pa_network."Fenoscandia_LandCover_polygon_', ecosystem, '" AS eco
+WHERE ST_Intersects(eco.geom, pa_buffered.geom)
+GROUP BY pa_buffered.gid;')
 
 rs <- dbSendQuery(con, create_view)
 
@@ -64,7 +65,7 @@ PERMANENT <- 'p_ConnectivityNetwork'
 if (dir.exists(paste(gisDbase, location, PERMANENT, sep='/'))==FALSE) {
 print(paste0('ERROR: Mapset <', mapset,
              '> not found in location <',
-			 location, '>!'))
+             location, '>!'))
 }
 
 # Define mapset to work in
@@ -79,7 +80,7 @@ try(system( paste("grass -text -c -e", wd)))
 # Initialize GRASS session
 initGRASS(gisBase=grasslib, location=location,
           mapset=mapset, gisDbase=gisDbase,
-		  override = TRUE)
+          override = TRUE)
 
 # Add basic project mapset to search path
 execGRASS('g.mapsets', operation='add', mapset=PERMANENT)
@@ -90,11 +91,11 @@ execGRASS('g.mapsets', operation='add', mapset=PERMANENT)
 # Import protected areas
 execGRASS('v.in.ogr', input=con_string, flags=c('overwrite'),
           layer=paste0('pa_network.protected_', ecosystem),
-		  output=paste0('protected_', ecosystem),
-		  geometry='geom')
+          output=paste0('protected_', ecosystem),
+          geometry='geom')
 
 ### Create friction cost mapcalc
-	  
+      
 ###
 # Assign friction cost values
 ###
@@ -109,7 +110,7 @@ for (r in 1:length(rastermaplist)) {
 # echo r.reclass --overwrite --verbose input=n50_arealdekke_pol output=$motstand_n50_arealdekke_pol rules=$rc_file
 execGRASS('r.reclass', overwrite=TRUE, verbose=TRUE, input=rastermaplist[r],
           output=paste0(gsub('tif', '', rasterlist[r]), '_', ecosystem, '_motstand'),
-		  rules=paste0(gsub('tif', '', rasterlist[r]), '_', ecosystem, '_motstand.txt'))
+          rules=paste0(gsub('tif', '', rasterlist[r]), '_', ecosystem, '_motstand.txt'))
 }
 
 # Compile mapcalculator expression
@@ -131,12 +132,12 @@ output_final <- paste0("motstand_",ecosystem, "_100m")
 # Aggregate raster maps to 100m resolution
 execGRASS('r.resamp.stats', overwrite=TRUE, verbose=TRUE,
           input=paste0("motstand_",ecosystem, "_10m"),
-		  output=output_final, method='average')
+          output=output_final, method='average')
 
 # Export to GeoTiff
 execGRASS('r.out.gdal', overwrite=TRUE, verbose=TRUE, input=output_final,
           output=paste0(gis_data_dir, output_final, '.tif'),
-		  createopt="COMPRESS=LZW,TFW=YES")
+          createopt="COMPRESS=LZW,TFW=YES")
 
 unlink_.gislock()
 remove_GISRC()
